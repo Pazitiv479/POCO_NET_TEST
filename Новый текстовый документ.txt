@@ -1,0 +1,74 @@
+https://www.google.com/search?q=client-server+application+with+the+POCO+C%2B%2B+tutorial+library&rlz=1C1GTPM_enRU1034RU1034&oq=client-server+application+with+the+POCO+C%2B%2B+tutorial+library&gs_lcrp=EgZjaHJvbWUyBggAEEUYOTIHCAEQIRifBTIHCAIQIRifBdIBBzUzMmowajeoAgiwAgHxBdXbVlzlbWn4&sourceid=chrome&ie=UTF-8
+
+// Server
+ #include "Poco/Net/TCPServer.h"
+ #include "Poco/Net/TCPServerConnection.h"
+ #include "Poco/Net/TCPServerConnectionFactory.h"
+ #include "Poco/Net/StreamSocket.h"
+ #include <iostream>
+ 
+
+ class MyConnection : public Poco::Net::TCPServerConnection {
+ public:
+  MyConnection(const Poco::Net::StreamSocket& s) : Poco::Net::TCPServerConnection(s) {}
+ 
+
+  void run() {
+  Poco::Net::StreamSocket& ss = socket();
+  char buffer[256];
+  int bytesReceived = ss.receiveBytes(buffer, sizeof(buffer) - 1);
+  if (bytesReceived > 0) {
+  buffer[bytesReceived] = '\0';
+  std::cout << "Received: " << buffer << std::endl;
+  ss.sendBytes("Hello from server", 17);
+  }
+  }
+ };
+ 
+
+ class MyConnectionFactory : public Poco::Net::TCPServerConnectionFactory {
+ public:
+  Poco::Net::TCPServerConnection* createConnection(const Poco::Net::StreamSocket& s) {
+  return new MyConnection(s);
+  }
+ };
+ 
+
+ int main() {
+  Poco::Net::ServerSocket serverSocket(9980);
+  MyConnectionFactory factory;
+  Poco::Net::TCPServer server(factory, serverSocket);
+  server.start();
+  std::cout << "Server started on port 9980" << std::endl;
+  getchar();
+  server.stop();
+  return 0;
+ }
+ 
+
+ // Client
+ #include "Poco/Net/StreamSocket.h"
+ #include "Poco/Net/SocketAddress.h"
+ #include <iostream>
+ 
+
+ int main() {
+  try {
+  Poco::Net::SocketAddress addr("127.0.0.1", 9980);
+  Poco::Net::StreamSocket socket;
+  socket.connect(addr);
+ 
+
+  socket.sendBytes("Hello from client", 17);
+  char buffer[256];
+  int bytesReceived = socket.receiveBytes(buffer, sizeof(buffer) - 1);
+  if (bytesReceived > 0) {
+  buffer[bytesReceived] = '\0';
+  std::cout << "Received: " << buffer << std::endl;
+  }
+  socket.close();
+  } catch (Poco::Exception& e) {
+  std::cerr << "Exception: " << e.displayText() << std::endl;
+  }
+  return 0;
+ }

@@ -1,0 +1,85 @@
+#include "Poco/Net/ServerSocket.h"              // Для создания серверного сокета
+#include "Poco/Net/StreamSocket.h"              // Для работы с потоковыми сокетами
+#include "Poco/Net/TCPServer.h"                 // Для создания многопоточного TCP-сервера
+#include "Poco/Net/TCPServerConnection.h"       // Базовый класс для обработки соединений
+#include "Poco/Net/TCPServerConnectionFactory.h"// Фабрика для создания соединений
+#include "Poco/Net/TCPServerParams.h"           // Параметры сервера
+#include <iostream>
+#include <string>
+#include <vector>
+#include <mutex>
+#include <thread>
+
+using namespace Poco::Net;
+using namespace std;
+
+// Глобальный список активных клиентских сокетов и мьютекс для синхронизации доступа
+vector<StreamSocket> clients;
+mutex clientsMutex;
+
+// Класс для обработки каждого клиентского соединения
+class ClientConnection : public TCPServerConnection {
+public:
+    ClientConnection(const StreamSocket& s) : TCPServerConnection(s) {}
+
+    void run() override {
+        StreamSocket& clientSocket = socket();
+        {
+            lock_guard<mutex> lock(clientsMutex);
+            clients.push_back(clientSocket); // Добавляем нового клиента в список
+        }
+
+        try {
+            char buffer[1024];
+            int bytesReceived;
+            while ((bytesReceived = clientSocket.receiveBytes(buffer, sizeof(buffer))) > 0) {
+                string message(buffer, bytesReceived);
+                cout << "Получено сообщение от клиента: " << message << endl;
+
+                // Отправляем сообщение обратно всем клиентам
+                lock_guard<mutex> lock(clientsMutex);
+                for (auto& sock : clients) {
+                    if (sock != clientSocket) { // Не отправляем обратно отправителю
+                        sock.sendBytes(message.data(), message.size());
+                    }
+                }
+            }
+        } catch (Poco::Exception& ex) {
+            cerr << "Ошибка: " << ex.displayText() << endl;
+        }
+
+        // Удаляем клиента из списка при отключении
+        {
+            lock_guard<mutex> lock(clientsMutex);
+            clients.erase(remove(clients.begin(), clients.end(), clientSocket), clients.end());
+        }
+    }
+};
+
+int main() {
+    try {
+        // Создаем серверный сокет, прослушивающий порт 12345
+        ServerSocket serverSocket(12345);
+        // Устанавливаем параметры сервера
+        auto params = new TCPServerParams();
+        params->setMaxThreads(100); // Максимальное количество потоков
+        params->setMaxQueued(100);  // Максимальное количество ожидающих соединений
+
+        // Создаем TCP-сервер с использованием фабрики соединений
+        TCPServer server(new TCPServerConnectionFactoryImpl<ClientConnection>(), serverSocket, params);
+        server.start(); // Запускаем сервер
+
+        cout << "Сервер запущен на порту 12345. Ожидание подключений..." << endl;
+
+        // Основной поток остается активным
+        while (true) {
+            this_thread::sleep_for(chrono::seconds(1));
+        }
+
+        server.stop(); // Останавливаем сервер при завершении (никогда не достигается в этом примере)
+    } catch (Poco::Exception& ex) {
+        cerr << "Ошибка сервера: " << ex.displayText() << endl;
+    }
+
+    return 0;
+}

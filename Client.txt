@@ -1,0 +1,47 @@
+#include "Poco/Net/StreamSocket.h"      // Для работы с потоковыми сокетами
+#include "Poco/Net/SocketAddress.h"     // Для указания адреса сервера
+#include <iostream>
+#include <string>
+#include <thread>
+
+using namespace Poco::Net;
+using namespace std;
+
+// Функция для приема сообщений от сервера
+void receiveMessages(StreamSocket& socket) {
+    try {
+        char buffer[1024];
+        int bytesReceived;
+        while ((bytesReceived = socket.receiveBytes(buffer, sizeof(buffer))) > 0) {
+            string message(buffer, bytesReceived);
+            cout << "Сообщение от сервера: " << message << endl;
+        }
+    } catch (Poco::Exception& ex) {
+        cerr << "Ошибка при приеме данных: " << ex.displayText() << endl;
+    }
+}
+
+int main() {
+    try {
+        // Устанавливаем соединение с сервером на localhost:12345
+        SocketAddress serverAddress("127.0.0.1", 12345);
+        StreamSocket socket(serverAddress);
+        cout << "Подключено к серверу." << endl;
+
+        // Запускаем поток для приема сообщений от сервера
+        thread receiver(receiveMessages, ref(socket));
+
+        // Основной поток отправляет сообщения, введенные пользователем
+        string userInput;
+        while (getline(cin, userInput)) {
+            if (userInput.empty()) continue;
+            socket.sendBytes(userInput.data(), userInput.size());
+        }
+
+        receiver.join(); // Ожидаем завершения потока приема сообщений
+    } catch (Poco::Exception& ex) {
+        cerr << "Ошибка клиента: " << ex.displayText() << endl;
+    }
+
+    return 0;
+}
