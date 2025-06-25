@@ -1,195 +1,201 @@
-//GPT_1
-
+#include <Poco/Net/ServerSocket.h>
+#include <Poco/Net/TCPServer.h>
+#include <Poco/Net/TCPServerConnection.h>
+#include <Poco/Net/TCPServerConnectionFactory.h>
+#include <Poco/Net/StreamSocket.h>
+#include <Poco/Mutex.h>
+#include <Poco/ThreadPool.h>
 #include <iostream>
-#include <string>
-#include <vector>
-#include <mutex>
-#include <thread>
-#include "Poco/Net/ServerSocket.h"              // Для создания серверного сокета
-#include "Poco/Net/StreamSocket.h"              // Для работы с потоковыми сокетами
-#include "Poco/Net/TCPServer.h"                 // Для создания многопоточного TCP-сервера
-#include "Poco/Net/TCPServerConnection.h"       // Базовый класс для обработки соединений
-#include "Poco/Net/TCPServerConnectionFactory.h"// Фабрика для создания соединений
-#include "Poco/Net/TCPServerParams.h"           // Параметры сервера
+#include <map>
+#include <memory>
 
 using namespace Poco::Net;
+using namespace Poco;
 using namespace std;
 
-// Глобальный список активных клиентских сокетов и мьютекс для синхронизации доступа
-vector<StreamSocket> clients;
-mutex clientsMutex;
+// Глобальный реестр для хранения активных клиентов (id --> StreamSocket)
+static Mutex registryMutex;
+static map<int, StreamSocket> clients;
+static int clientIDCount = 0;
 
-// Класс для обработки каждого клиентского соединения
-class ClientConnection : public TCPServerConnection {
+// Класс для обработки соединения с клиентом
+class ClientConnection : public TCPServerConnection 
+{
 public:
-    ClientConnection(const StreamSocket& s) : TCPServerConnection(s) {}
+	ClientConnection(const StreamSocket& sock) : TCPServerConnection(sock)
+	{
+		Poco::ScopedLock<Poco::Mutex> lock(registryMutex);
+		//std::_Atomic_lock_guard<Mutex> lock(registryMutex);
+		int clientID = clientIDCount++;
+		clients[clientID] = sock;
 
-    void run() override {
-        StreamSocket& clientSocket = socket();
-        {
-            lock_guard<mutex> lock(clientsMutex);
-            clients.push_back(clientSocket); // Добавляем нового клиента в список
-        }
+		cout << "[+] Client # " << clientID << " connected: " << sock.peerAddress().toString() << endl;
+	}
 
-        try {
-            char buffer[1024];
-            int bytesReceived;
-            while ((bytesReceived = clientSocket.receiveBytes(buffer, sizeof(buffer))) > 0) {
-                string message(buffer, bytesReceived);
-                cout << "Получено сообщение от клиента: " << message << endl;
+	void run() override
+	{
+		StreamSocket sock = socket();
 
-                // Отправляем сообщение обратно всем клиентам
-                lock_guard<mutex> lock(clientsMutex);
-                for (auto& sock : clients) {
-                    if (sock != clientSocket) { // Не отправляем обратно отправителю
-                        sock.sendBytes(message.data(), message.size());
-                    }
-                }
-            }
-        }
-        catch (Poco::Exception& ex) {
-            cerr << "Ошибка: " << ex.displayText() << endl;
-        }
+		try
+		{
+			char buffer[1024];
+			int n = sock.receiveBytes(buffer, sizeof(buffer));
 
-        // Удаляем клиента из списка при отключении
-        {
-            lock_guard<mutex> lock(clientsMutex);
-            clients.erase(remove(clients.begin(), clients.end(), clientSocket), clients.end());
-        }
-    }
+			while (n > 0)
+			{
+				string msg(buffer, n);
+				cout << "[#" << clientID << "]: " << msg << endl;
+
+				// Ответ клиенту (echo)
+				string reply = "The server responds: " + msg;
+				sock.sendBytes(reply.data(), (int)reply.size());
+
+				n = sock.receiveBytes(buffer, sizeof(buffer));
+			}
+		}
+		catch (Exception& ex)
+		{
+			cerr << "[!] Client error #" << clientID << ": "
+				<< ex.displayText() << endl;
+		}
+
+		// Удаление клиента из реестра при отключении
+		{
+			Poco::ScopedLock<Poco::Mutex> lock(registryMutex);
+			//std::_Atomic_lock_guard<Mutex> lock(registryMutex);
+			clients.erase(clientID);
+		}
+		cout << "[-] Client #" << clientID << " disconnected" << endl;
+	}
+
+private:
+	int clientID;
 };
 
-int main() {
-    try {
-        Poco::Net::initializeNetwork();
-        // Создаем серверный сокет, прослушивающий порт 12345
-        ServerSocket serverSocket(12345);
-        // Устанавливаем параметры сервера
-        auto params = new TCPServerParams();
-        params->setMaxThreads(100); // Максимальное количество потоков
-        params->setMaxQueued(100);  // Максимальное количество ожидающих соединений
+int main()
+{
+	UINT16 port = 12345;
+	ServerSocket serverSocket(port);
+	TCPServerParams::Ptr params = new TCPServerParams;
+	params->setMaxQueued(100);
+	params->setMaxThreads(16);
 
-        // Создаем TCP-сервер с использованием фабрики соединений
-        TCPServer server(new TCPServerConnectionFactoryImpl<ClientConnection>(), serverSocket, params);
-        server.start(); // Запускаем сервер
+	TCPServer server(new TCPServerConnectionFactoryImpl<ClientConnection>(), 
+		serverSocket, 
+		params);
 
-        cout << "Сервер запущен на порту 12345. Ожидание подключений..." << endl;
+	server.start();
+	cout << "The server is running on the port: " << port << endl;
 
-        // Основной поток остается активным
-        while (true) {
-            this_thread::sleep_for(chrono::seconds(1));
-        }
+	// Команда "exit" остановит сервер
+	cout << "Enter \"exit\" to stop the server.\n";
+	
+	string cmd;
+	while (getline(cin, cmd))
+	{
+		if (cmd == "exit")
+		{
+			break;
+		}
 
-        server.stop(); // Останавливаем сервер при завершении (никогда не достигается в этом примере)
-    }
-    catch (Poco::Exception& ex) {
-        cerr << "Ошибка сервера: " << ex.displayText() << endl;
-    }
+		// Пример отправки сообщения всем подключенным клиентам
+		if (cmd.rfind("broadcast ", 0) == 0)
+		{
+			string msg = cmd.substr(10);
+			Poco::ScopedLock<Poco::Mutex> lock(registryMutex);
+			//std::lock_guard<Mutex> lock(registryMutex);
+			for (auto& kv : clients)
+			{
+				kv.second.sendBytes(msg.data(), (int)msg.size());
+			}
 
-    return 0;
+			cout << "Sent to all" << msg << endl;
+		}
+	}
+
+	server.stop();
+	cout << "The server is stopped" << endl;
+	return 0;
 }
 
-//GPT_2
+// stackOwerflow
 
 //#include <iostream>
-//#include <Poco/Net/TCPServer.h>
-//#include <Poco/Net/TCPServerConnection.h>
-//#include <Poco/Net/TCPServerConnectionFactory.h>
-//#include <Poco/Net/StreamSocket.h>
-//#include <Poco/Net/ServerSocket.h>
-//#include <Poco/Net/SocketStream.h>
-////#include <Poco/StreamCopier.h>
-////#include <Poco/ThreadPool.h>
-//
-//using namespace Poco::Net;
-//using namespace Poco;
+//#include "Poco/Net/TCPServer.h"
+//#include "Poco/Net/TCPServerParams.h"
+//#include "Poco/Net/TCPServerConnectionFactory.h"
+//#include "Poco/Net/TCPServerConnection.h"
+//#include "Poco/Net/Socket.h"
 //using namespace std;
 //
-//class EchoConnection : public TCPServerConnection
+//class newConnection : public Poco::Net::TCPServerConnection 
 //{
 //public:
-//    EchoConnection(const StreamSocket& s) : TCPServerConnection(s) {}
+//    newConnection(const Poco::Net::StreamSocket& s) :
+//        Poco::Net::TCPServerConnection(s) 
+//    {}
 //
-//    void run() override
+//    void run() 
 //    {
-//        try
+//        cout << "New connection from: " << socket().peerAddress().host().toString() << endl << flush;
+//        bool isOpen = true;
+//        Poco::Timespan timeOut(10, 0);
+//        unsigned char incommingBuffer[1000];
+//        while (isOpen) 
 //        {
-//            StreamSocket& ss = socket();
-//            char buffer[1024];
-//            int n;
-//            while ((n = ss.receiveBytes(buffer, sizeof(buffer))) > 0)
+//            if (socket().poll(timeOut, Poco::Net::Socket::SELECT_READ) == false) 
 //            {
-//                ss.sendBytes(buffer, n);
+//                cout << "TIMEOUT!" << endl << flush;
+//            }
+//            else 
+//            {
+//                cout << "RX EVENT!!! ---> " << flush;
+//                int nBytes = -1;
+//
+//                try 
+//                {
+//                    nBytes = socket().receiveBytes(incommingBuffer, sizeof(incommingBuffer));
+//                }
+//                catch (Poco::Exception& exc) 
+//                {
+//                    //Handle your network errors.
+//                    cerr << "Network error: " << exc.displayText() << endl;
+//                    isOpen = false;
+//                }
+//
+//
+//                if (nBytes == 0) 
+//                {
+//                    cout << "Client closes connection!" << endl << flush;
+//                    isOpen = false;
+//                }
+//                else 
+//                {
+//                    cout << "Receiving nBytes: " << nBytes << endl << flush;
+//                }
 //            }
 //        }
-//        catch (Exception& e)
-//        {
-//            cerr << "EchoConnection error: " << e.displayText() << endl;
-//        }
+//        cout << "Connection finished!" << endl << flush;
 //    }
 //};
 //
-//int main()
+//int main() 
 //{
-//    try
-//    {
-//        ServerSocket svs(12345); // Создание сервера на порту 12345
-//        TCPServer server(new TCPServerConnectionFactoryImpl<EchoConnection>(), svs);
-//        server.start();
-//        cout << "Сервер запущен. Нажмите Enter для завершения." << endl;
-//        cin.get();
-//        server.stop();
-//    }
-//    catch (Exception& e)
-//    {
-//        cerr << "Ошибка сервера: " << e.displayText() << endl;
-//    }
+//
+//    //Create a server socket to listen.
+//    Poco::Net::ServerSocket svs(1234);
+//
+//    //Configure some server params.
+//    Poco::Net::TCPServerParams* pParams = new Poco::Net::TCPServerParams();
+//    pParams->setMaxThreads(4);
+//    pParams->setMaxQueued(4);
+//    pParams->setThreadIdleTime(100);
+//
+//    //Create your server
+//    Poco::Net::TCPServer myServer(new Poco::Net::TCPServerConnectionFactoryImpl<newConnection>(), svs, pParams);
+//    myServer.start();
+//
+//    while (1);
 //
 //    return 0;
-//}
-
-//Google
-
-//#include "Poco/Net/TCPServer.h"
-//#include "Poco/Net/TCPServerConnection.h"
-//#include "Poco/Net/TCPServerConnectionFactory.h"
-//#include "Poco/Net/StreamSocket.h"
-//#include <iostream>
-//
-//
-//class MyConnection : public Poco::Net::TCPServerConnection {
-//public:
-//	MyConnection(const Poco::Net::StreamSocket& s) : Poco::Net::TCPServerConnection(s) {}
-//
-//
-//	void run() {
-//		Poco::Net::StreamSocket& ss = socket();
-//		char buffer[256];
-//		int bytesReceived = ss.receiveBytes(buffer, sizeof(buffer) - 1);
-//		if (bytesReceived > 0) {
-//			buffer[bytesReceived] = '\0';
-//			std::cout << "Received: " << buffer << std::endl;
-//			ss.sendBytes("Hello from server", 17);
-//		}
-//	}
-//};
-//
-//
-//class MyConnectionFactory : public Poco::Net::TCPServerConnectionFactory {
-//public:
-//	Poco::Net::TCPServerConnection* createConnection(const Poco::Net::StreamSocket& s) {
-//		return new MyConnection(s);
-//	}
-//};
-//
-//
-//int main() {
-//	Poco::Net::ServerSocket serverSocket(9980);
-//	MyConnectionFactory factory;
-//	Poco::Net::TCPServer server(factory, serverSocket);
-//	server.start();
-//	std::cout << "Server started on port 9980" << std::endl;
-//	getchar();
-//	server.stop();
-//	return 0;
 //}
