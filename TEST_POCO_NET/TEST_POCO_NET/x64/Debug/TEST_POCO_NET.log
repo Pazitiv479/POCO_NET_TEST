@@ -1,1 +1,4 @@
-﻿
+﻿  ServerMain.cpp
+D:\Danila\POCO_NET_TEST\ServerTCP\Server.h(2,10): error C1083: Не удается открыть файл включение: Poco/Net/TCPServer.h: No such file or directory,
+  (компиляция исходного файла "ServerMain.cpp")
+  
