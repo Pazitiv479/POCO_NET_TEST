@@ -162,6 +162,14 @@
   <ItemGroup>
     <ClInclude Include="Server.h" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\POCO\Foundation\Foundation_vs170.vcxproj">
+      <Project>{b01196cc-b693-4548-8464-2ff60499e73f}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\POCO\Net\Net_vs170.vcxproj">
+      <Project>{b057a1fe-09f7-465e-b8b5-e1b659051d76}</Project>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
