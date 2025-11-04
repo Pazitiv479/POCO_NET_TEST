@@ -6,15 +6,14 @@ MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TEST_POCO_NET", "TEST_POCO_NET.vcxproj", "{C5CFD3C1-E96C-4366-AC17-BB0569895E78}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ServerTCP", "..\ServerTCP\ServerTCP.vcxproj", "{314760CA-3B24-482E-B666-75C6D636D3E9}"
-	ProjectSection(ProjectDependencies) = postProject
-		{C5CFD3C1-E96C-4366-AC17-BB0569895E78} = {C5CFD3C1-E96C-4366-AC17-BB0569895E78}
-	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "POCO", "POCO", "{36D591C7-65C7-A0D1-1CBC-10CDE441BDC8}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Net", "..\POCO\Net\Net_vs170.vcxproj", "{B057A1FE-09F7-465E-B8B5-E1B659051D76}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Foundation", "..\POCO\Foundation\Foundation_vs170.vcxproj", "{B01196CC-B693-4548-8464-2FF60499E73F}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ClienTCP", "..\ClienTCP\ClienTCP.vcxproj", "{01D66228-3982-4315-841A-D3B9D3CBB1D3}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -56,6 +55,14 @@ Global
 		{B01196CC-B693-4548-8464-2FF60499E73F}.Release|x64.Build.0 = release_static_md|x64
 		{B01196CC-B693-4548-8464-2FF60499E73F}.Release|x86.ActiveCfg = release_static_md|Win32
 		{B01196CC-B693-4548-8464-2FF60499E73F}.Release|x86.Build.0 = release_static_md|Win32
+		{01D66228-3982-4315-841A-D3B9D3CBB1D3}.Debug|x64.ActiveCfg = Debug|x64
+		{01D66228-3982-4315-841A-D3B9D3CBB1D3}.Debug|x64.Build.0 = Debug|x64
+		{01D66228-3982-4315-841A-D3B9D3CBB1D3}.Debug|x86.ActiveCfg = Debug|Win32
+		{01D66228-3982-4315-841A-D3B9D3CBB1D3}.Debug|x86.Build.0 = Debug|Win32
+		{01D66228-3982-4315-841A-D3B9D3CBB1D3}.Release|x64.ActiveCfg = Release|x64
+		{01D66228-3982-4315-841A-D3B9D3CBB1D3}.Release|x64.Build.0 = Release|x64
+		{01D66228-3982-4315-841A-D3B9D3CBB1D3}.Release|x86.ActiveCfg = Release|Win32
+		{01D66228-3982-4315-841A-D3B9D3CBB1D3}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
